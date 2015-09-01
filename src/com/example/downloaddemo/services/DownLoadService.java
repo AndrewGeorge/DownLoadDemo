@@ -5,6 +5,8 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import org.apache.http.HttpStatus;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
@@ -25,9 +27,11 @@ public class DownLoadService extends Service {
 			.getExternalStorageDirectory().getAbsolutePath() + "/downloads";
 	public static final String ACTION_START = "ACTION_START";
 	public static final String ACTION_STOP = "ACTION_STOP";
+	public static final String ACTION_FINISH = "ACTION_FINISH";
 	public static final String ACTION_UPDATE = "ACTION_UPDATE";
 	public static final int MSG_INIT = 0;
-	private  DownLoadTask mDownLoadTask=null;
+	// private DownLoadTask mDownLoadTask=null;
+	private Map<Integer, DownLoadTask> mTasks = new LinkedHashMap<Integer, DownLoadTask>();
 
 	@Override
 	public int onStartCommand(Intent intent, int flags, int startId) {
@@ -35,14 +39,19 @@ public class DownLoadService extends Service {
 		if (ACTION_START.equals(intent.getAction())) {
 			FileInfo fileinfo = (FileInfo) intent
 					.getSerializableExtra("fileinfo");
-			new InitThread(fileinfo).start();
+			InitThread minitThread=new InitThread(fileinfo);
+			DownLoadTask.sExecutorService.execute(minitThread);
+			
+			
 			Log.i("test", "start:" + fileinfo.toString());
 		} else if (ACTION_STOP.equals(intent.getAction())) {
 			FileInfo fileinfo = (FileInfo) intent
 					.getSerializableExtra("fileinfo");
-			if (mDownLoadTask!=null) {
-				
-				mDownLoadTask.isPause=true;
+			// 从集合中获取下载任务
+			DownLoadTask task = mTasks.get(fileinfo.getId());
+			if (task != null) {
+				// 停止下载任务
+				task.isPause = true;
 			}
 			Log.i("test", "stop:" + fileinfo.toString());
 		}
@@ -63,10 +72,13 @@ public class DownLoadService extends Service {
 			switch (msg.what) {
 			case MSG_INIT:
 				FileInfo info = (FileInfo) msg.obj;
-				Log.i("test", "init:"+info.toString());
-				//开启下载任务
-				mDownLoadTask=new DownLoadTask(DownLoadService.this, info);
-				mDownLoadTask.downLoad();
+				Log.i("test", "init:" + info.toString());
+				// 开启下载任务,默认为三个线程下载
+				DownLoadTask task = new DownLoadTask(DownLoadService.this,
+						info, 3);
+				task.downLoad();
+				// 把下载任务添加到集合中
+				mTasks.put(info.getId(), task);
 				break;
 
 			default:
